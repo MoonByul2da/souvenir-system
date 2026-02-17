@@ -1,0 +1,22 @@
+# <Directory "E:/xampp/www/maintain-request/">
+# Options Indexes FollowSymLinks MultiViews
+# AllowOverride All
+# Order allow,deny
+# allow from all
+
+# </Directory>
+# Options +FollowSymLinks -Indexes
+
+RewriteEngine on
+
+RewriteBase /souvenir-system/
+# RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^([^/]+)/$ localhost/souvenir-system/$1 [R=301,L]
+RewriteRule ^([^\.]+)$ $1.php [NC,L]
+RewriteRule ^([^/.]+)$ $1.php [L]
+RewriteCond %{REQUEST_URI} ^/404/$
+RewriteRule ^(.*)$ /404.html [L]
+
+ErrorDocument 404 /souvenir-system/404.html
+ErrorDocument 500 /souvenir-system/500.html
