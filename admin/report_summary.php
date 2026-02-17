@@ -25,9 +25,9 @@ $sql = "SELECT $selectField as identify_val,
         MAX(u.email) as email,
         COUNT(DISTINCT r.request_id) as total_times, 
         SUM(rd.qty_requested) as total_qty
-        FROM users u
-        JOIN requests r ON u.user_id = r.user_id
-        JOIN request_details rd ON r.request_id = rd.request_id
+        FROM souvenir_users u
+        JOIN souvenir_requests r ON u.user_id = r.user_id
+        JOIN souvenir_request_details rd ON r.request_id = rd.request_id
         WHERE r.status = 'Approved' AND $condition
         GROUP BY $groupBy
         ORDER BY total_qty DESC";

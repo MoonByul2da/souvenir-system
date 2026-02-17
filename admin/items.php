@@ -53,7 +53,7 @@ if (isset($_GET['delete'])) {
     header("Location: items.php?status=deleted"); exit();
 }
 
-$items = $conn->query("SELECT * FROM items ORDER BY item_id DESC")->fetchAll(PDO::FETCH_ASSOC);
+$items = $conn->query("SELECT * FROM souvenir_items")->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
 <div class="container mt-4">

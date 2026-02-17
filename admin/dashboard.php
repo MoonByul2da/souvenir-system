@@ -78,9 +78,14 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                 </td>
                                 <td>
                                     <div class="btn-group">
+                                        <a href="edit_request.php?id=<?php echo $req['request_id']; ?>" class="btn btn-sm btn-outline-primary" title="ตรวจสอบ/แก้ไข">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </a>
+
                                         <a href="../print_request.php?id=<?php echo $req['request_id']; ?>" target="_blank" class="btn btn-sm btn-outline-secondary" title="พิมพ์">
                                             <i class="bi bi-printer"></i>
                                         </a>
+                                        
                                         <?php if($req['status'] == 'Pending'): ?>
                                             <button onclick="updateStatus(<?php echo $req['request_id']; ?>, 'Approved')" class="btn btn-sm btn-success" title="อนุมัติ"><i class="bi bi-check-lg"></i></button>
                                             <button onclick="updateStatus(<?php echo $req['request_id']; ?>, 'Rejected')" class="btn btn-sm btn-danger" title="ไม่อนุมัติ"><i class="bi bi-x-lg"></i></button>
