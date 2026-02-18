@@ -29,27 +29,33 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 <table class="table table-hover align-middle">
                     <thead class="table-light">
                         <tr>
-                            <th width="15%">อีเมล</th> <th>วันที่ใช้</th> <th>ผู้ขอเบิก</th> <th>หน่วยงาน</th> <th>รายการของ</th> <th>สถานะ</th> <th>จัดการ</th>
+                            <th width="15%">อีเมล</th> 
+                            <th width="10%">วันที่ใช้</th>
+                            <th width="15%">ผู้ขอเบิก</th>
+                            <th width="10%">หน่วยงาน</th>
+                            <th width="20%">รายการของ</th>
+                            <th width="10%">สถานะ</th>
+                            <th width="10%">จัดการ</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach($requests as $req): ?>
                             <tr>
-                                <td class="small text-primary"><?php echo $req['email']; ?></td>
+                                <td class="text-primary small"><?php echo $req['email']; ?></td>
                                 <td class="fw-bold"><?php echo DateThai($req['date_required']); ?></td>
                                 <td><?php echo $req['full_name']; ?></td>
                                 <td><?php echo $req['department']; ?></td>
                                 <td><small><?php echo $req['item_list']; ?></small></td>
                                 <td>
                                     <?php 
-                                        $statusClass = ($req['status']=='Pending'?'bg-warning text-dark':($req['status']=='Approved'?'bg-success text-white':'bg-danger text-white'));
+                                        $statusClass = ($req['status']=='Pending'?'bg-warning text-dark':($req['status']=='Approved'?'bg-success':'bg-danger'));
                                     ?>
                                     <span class="badge <?php echo $statusClass; ?>"><?php echo $req['status']; ?></span>
                                 </td>
                                 <td>
                                     <div class="btn-group">
                                         <button type="button" class="btn btn-sm btn-outline-primary" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
-                                            <i class="bi bi-pencil-square"></i>
+                                            <i class="bi bi-pencil-square"></i> ตรวจสอบ
                                         </button>
                                         <a href="../print_request.php?id=<?php echo $req['request_id']; ?>" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i></a>
                                     </div>
@@ -65,18 +71,25 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl">
-        <form action="update_and_approve.php" method="POST">
+        <form action="update_and_approve.php" method="POST" id="requestForm">
             <div class="modal-content">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title">ตรวจสอบและแก้ไขรายการเบิก</h5>
+                    <h5 class="modal-title">ตรวจสอบและพิจารณาใบเบิก</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body" id="modalBody">
                     <div class="text-center p-5"><div class="spinner-border text-primary"></div></div>
                 </div>
-                <div class="modal-footer">
+                <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
-                    <button type="submit" name="status" value="Approved" class="btn btn-success px-4">บันทึกและอนุมัติ (ส่งเมล)</button>
+                    
+                    <button type="button" class="btn btn-danger px-4" onclick="confirmReject()">
+                        <i class="bi bi-x-circle me-1"></i> ไม่อนุมัติ
+                    </button>
+                    
+                    <button type="button" class="btn btn-success px-4 shadow-sm" onclick="confirmApprove()">
+                        <i class="bi bi-check-circle me-1"></i> บันทึกและอนุมัติ
+                    </button>
                 </div>
             </div>
         </form>
@@ -96,10 +109,7 @@ function openEditModal(reqId) {
     editModal.show();
 
     fetch('../ajax/get_request.php?id=' + reqId)
-        .then(response => {
-            if (!response.ok) throw new Error('404 Not Found');
-            return response.json();
-        })
+        .then(response => response.json())
         .then(data => {
             itemIdx = 0;
             let rowsHtml = '';
@@ -116,25 +126,25 @@ function openEditModal(reqId) {
                 </div>
                 <div class="mb-3"><label class="small">วัตถุประสงค์</label><textarea name="purpose" class="form-control" rows="1">${data.header.purpose}</textarea></div>
                 <div class="mb-4 col-md-4"><label class="small">วันที่ต้องการใช้</label><input type="date" name="date_required" class="form-control" value="${data.header.date_required}"></div>
-                <table class="table table-bordered" id="modalItemTable">
+                <table class="table table-bordered table-sm" id="modalItemTable">
                     <thead class="table-light"><tr><th>รายการ</th><th width="15%">จำนวน</th><th width="15%">หน่วย</th><th>หมายเหตุ</th><th width="5%">ลบ</th></tr></thead>
                     <tbody>${rowsHtml}</tbody>
                 </table>
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addRowInModal()">+ เพิ่มรายการ</button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="addRowInModal()">+ เพิ่มรายการพัสดุ</button>
             `;
         })
         .catch(err => {
-            content.innerHTML = `<div class="alert alert-danger text-center"><i class="bi bi-exclamation-triangle me-2"></i>ไม่พบไฟล์ดึงข้อมูล (404): ตรวจสอบโฟลเดอร์ ajax/</div>`;
+            content.innerHTML = `<div class="alert alert-danger">ไม่พบไฟล์ดึงข้อมูล: ตรวจสอบเส้นทาง ajax/get_request.php</div>`;
         });
 }
 
 function generateRow(idx, item = null) {
     let opts = itemsData.map(i => `<option value="${i.item_id}" ${item && i.item_id == item.item_id ? 'selected' : ''}>${i.item_name}</option>`).join('');
     return `<tr>
-        <td><select name="items[${idx}][id]" class="form-select">${opts}</select></td>
-        <td><input type="number" name="items[${idx}][qty]" class="form-control text-center" value="${item?item.qty_requested:1}"></td>
-        <td><input type="text" name="items[${idx}][unit]" class="form-control text-center" value="${item?item.unit:'ชิ้น'}"></td>
-        <td><input type="text" name="items[${idx}][remark]" class="form-control" value="${item?item.remark:''}"></td>
+        <td><select name="items[${idx}][id]" class="form-select form-select-sm">${opts}</select></td>
+        <td><input type="number" name="items[${idx}][qty]" class="form-control form-control-sm text-center" value="${item?item.qty_requested:1}"></td>
+        <td><input type="text" name="items[${idx}][unit]" class="form-control form-control-sm text-center" value="${item?item.unit:'ชิ้น'}"></td>
+        <td><input type="text" name="items[${idx}][remark]" class="form-control form-control-sm" value="${item?item.remark:''}"></td>
         <td class="text-center"><button type="button" class="btn btn-danger btn-sm" onclick="this.closest('tr').remove()">X</button></td>
     </tr>`;
 }
@@ -142,5 +152,52 @@ function generateRow(idx, item = null) {
 function addRowInModal() {
     document.querySelector('#modalItemTable tbody').insertAdjacentHTML('beforeend', generateRow(itemIdx));
     itemIdx++;
+}
+function confirmApprove() {
+    Swal.fire({
+        title: 'ยืนยันการอนุมัติ?',
+        text: "ระบบจะบันทึกข้อมูลและส่งอีเมลแจ้งผลการอนุมัติไปยังผู้ขอเบิกทันที",
+        icon: 'success', 
+        showCancelButton: true,
+        confirmButtonColor: '#198754', 
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'ยืนยันการอนุมัติ',
+        cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const form = document.getElementById('requestForm');
+            
+            const statusInput = document.createElement('input');
+            statusInput.type = 'hidden';
+            statusInput.name = 'status';
+            statusInput.value = 'Approved';
+            
+            form.appendChild(statusInput);
+            form.submit(); 
+        }
+    })
+}
+
+function confirmReject() {
+    Swal.fire({
+        title: 'ยืนยันการไม่อนุมัติ?',
+        text: "คุณต้องการปฏิเสธคำขอเบิกรายการนี้ใช่หรือไม่?",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc3545', 
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'ใช่, ไม่อนุมัติ',
+        cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const form = document.getElementById('requestForm');
+            const statusInput = document.createElement('input');
+            statusInput.type = 'hidden';
+            statusInput.name = 'status';
+            statusInput.value = 'Rejected';
+            form.appendChild(statusInput);
+            form.submit();
+        }
+    })
 }
 </script>

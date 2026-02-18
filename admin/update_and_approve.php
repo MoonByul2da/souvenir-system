@@ -9,46 +9,66 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         $req_id = $_POST['request_id'];
         $user_id = $_POST['user_id'];
-        $status = $_POST['status'];
+        $status = $_POST['status']; // รับค่า 'Approved' หรือ 'Rejected'
 
+        // 1. อัปเดตข้อมูลผู้ใช้และหัวข้อใบเบิก
         $stmt_u = $conn->prepare("UPDATE souvenir_users SET full_name = ?, prefix = ?, department = ? WHERE user_id = ?");
         $stmt_u->execute(array($_POST['full_name'], $_POST['requester_prefix'], $_POST['department'], $user_id));
 
         $stmt_r = $conn->prepare("UPDATE souvenir_requests SET requester_prefix = ?, purpose = ?, date_required = ?, status = ? WHERE request_id = ?");
         $stmt_r->execute(array($_POST['requester_prefix'], $_POST['purpose'], $_POST['date_required'], $status, $req_id));
 
+        // 2. จัดการรายการของ (อัปเดตตามที่เจ้าหน้าที่แก้ไขใน Modal)
         $conn->prepare("DELETE FROM souvenir_request_details WHERE request_id = ?")->execute(array($req_id));
-        
-        $items_msg = "";
         if (!empty($_POST['items'])) {
             $stmt_d = $conn->prepare("INSERT INTO souvenir_request_details (request_id, item_id, qty_requested, unit, remark) VALUES (?, ?, ?, ?, ?)");
             foreach ($_POST['items'] as $item) {
                 if ($item['qty'] > 0) {
                     $stmt_d->execute(array($req_id, $item['id'], $item['qty'], $item['unit'], $item['remark']));
-                    
-                    $st_in = $conn->prepare("SELECT item_name FROM souvenir_items WHERE item_id = ?");
-                    $st_in->execute(array($item['id']));
-                    $name = $st_in->fetchColumn();
-                    $items_msg .= "- $name จำนวน {$item['qty']} {$item['unit']}<br>";
                 }
             }
         }
 
+        // 3. ส่งอีเมลแจ้งผลตามสถานะที่เลือก
         $stmt_m = $conn->prepare("SELECT email, full_name FROM souvenir_users WHERE user_id = ?");
         $stmt_m->execute(array($user_id));
         $u_info = $stmt_m->fetch(PDO::FETCH_ASSOC);
 
         if ($u_info && !empty($u_info['email'])) {
             $to = $u_info['email'];
-            $subject = "อนุมัติรายการเบิกของที่ระลึก (ID: $req_id)";
-            $url = "http://" . $_SERVER['HTTP_HOST'] . "/souvenir-system/print_request.php?id=" . $req_id;
-            $msg = "<html><body><h3>คำขอของคุณได้รับการอนุมัติแล้ว</h3><p>รายการที่อนุมัติ:<br>$items_msg</p><p><a href='$url' style='padding:10px; background:#0d6efd; color:white; text-decoration:none;'>คลิกพิมพ์ใบเบิก</a></p></body></html>";
+            
+            if ($status == 'Approved') {
+                $subject = "อนุมัติ: รายการเบิกของที่ระลึก (ID: $req_id)";
+                $msg_status = "ได้รับการอนุมัติเรียบร้อยแล้ว";
+                $color = "#198754";
+                $url = "http://" . $_SERVER['HTTP_HOST'] . "/souvenir-system/print_request.php?id=" . $req_id;
+                $action = "<p><a href='$url' style='padding:10px; background:#0d6efd; color:white; text-decoration:none; border-radius:5px;'>คลิกพิมพ์ใบเบิก</a></p>";
+            } else {
+                $subject = "แจ้งผล: รายการเบิกของที่ระลึก (ID: $req_id)";
+                $msg_status = "ไม่ได้รับการอนุมัติ";
+                $color = "#dc3545";
+                $action = "<p>หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง</p>";
+            }
+
+            $message = "<html><body style='font-family: Sarabun, sans-serif;'>
+                <h3 style='color: $color;'>รายการคำขอเบิกของท่าน $msg_status</h3>
+                <p>เรียน คุณ {$u_info['full_name']},</p>
+                $action
+                <br><small style='color:#888;'>ระบบแจ้งเตือนอัตโนมัติ - คณะมนุษยศาสตร์และสังคมศาสตร์</small>
+                </body></html>";
+
             $headers = "MIME-Version: 1.0\r\nContent-type:text/html;charset=UTF-8\r\nFrom: ระบบเบิกของ <no-reply@husoc.msu.ac.th>\r\n";
-            @mail($to, $subject, $msg, $headers);
+            @mail($to, $subject, $message, $headers);
         }
 
         $conn->commit();
-        header("Location: dashboard.php?msg=success");
+        
+        // ถ้าอนุมัติให้ไปหน้าพิมพ์ ถ้าไม่อนุมัติให้กลับหน้า Dashboard
+        if ($status == 'Approved') {
+            header("Location: ../print_request.php?id=" . $req_id);
+        } else {
+            header("Location: dashboard.php?status=rejected");
+        }
         exit();
 
     } catch (Exception $e) { $conn->rollBack(); echo $e->getMessage(); }
