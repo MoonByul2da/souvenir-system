@@ -63,13 +63,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         $conn->commit();
         
-        // ถ้าอนุมัติให้ไปหน้าพิมพ์ ถ้าไม่อนุมัติให้กลับหน้า Dashboard
-        if ($status == 'Approved') {
-            header("Location: ../print_request.php?id=" . $req_id);
-        } else {
-            header("Location: dashboard.php?status=rejected");
-        }
+        // เมื่อบันทึกและส่งอีเมลเสร็จสิ้น ให้ส่งกลับมาที่หน้า Dashboard เพื่อรีเฟรชตารางใหม่
+        header("Location: dashboard.php?msg=success");
         exit();
 
     } catch (Exception $e) { $conn->rollBack(); echo $e->getMessage(); }
 }
+?>

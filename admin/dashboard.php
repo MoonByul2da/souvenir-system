@@ -201,3 +201,19 @@ function confirmReject() {
     })
 }
 </script>
+<?php if(isset($_GET['msg']) && $_GET['msg'] == 'success'): ?>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        Swal.fire({
+            icon: 'success',
+            title: 'อัปเดตข้อมูลสำเร็จ!',
+            text: 'ระบบได้บันทึกข้อมูลและส่งอีเมลแจ้งผู้เบิกเรียบร้อยแล้ว',
+            showConfirmButton: false,
+            timer: 2500 // แสดงข้อความ 2.5 วินาทีแล้วปิดเอง
+        });
+        
+        // ลบ ?msg=success ออกจาก URL เพื่อไม่ให้แจ้งเตือนซ้ำเวลากดรีเฟรชหน้าเว็บอีกรอบ
+        window.history.replaceState(null, null, window.location.pathname);
+    });
+</script>
+<?php endif; ?>
