@@ -38,7 +38,7 @@ require_once 'ajax/get_all_ajax.php';
                 </div>
             </div>
             <div>
-                <a href="admin/login.php" class="btn btn-outline-secondary btn-sm"><i class="bi bi-shield-lock"></i> สำหรับเจ้าหน้าที่</a>
+                <a href="login" class="btn btn-outline-secondary btn-sm"><i class="bi bi-shield-lock"></i> สำหรับเจ้าหน้าที่</a>
             </div>
         </div>
     </header>
