@@ -1,7 +1,13 @@
 <?php
 session_start();
-if (!isset($_SESSION['admin_id'])) { exit("Unauthorized"); }
+if (!isset($_SESSION['admin_id'])) {
+    exit("Unauthorized");
+}
 require_once '../db_connect.php';
+require_once '../vendor/autoload.php'; // เพิ่มการโหลด PHPMailer
+
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     try {
@@ -33,10 +39,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt_m = $conn->prepare("SELECT email, full_name FROM souvenir_users WHERE user_id = ?");
         $stmt_m->execute(array($user_id));
         $u_info = $stmt_m->fetch(PDO::FETCH_ASSOC);
+        $mail = new PHPMailer(true);
 
         if ($u_info && !empty($u_info['email'])) {
             $to = $u_info['email'];
-            
+
             if ($status == 'Approved') {
                 $subject = "อนุมัติ: รายการเบิกของที่ระลึก (ID: $req_id)";
                 $msg_status = "ได้รับการอนุมัติเรียบร้อยแล้ว";
@@ -49,24 +56,66 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 $color = "#dc3545";
                 $action = "<p>หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง</p>";
             }
+            $emailSubject = $subject;
+            $emailBody = "เรียน คุณ" . $u_info['full_name'] . "\n\n";
+            $emailBody .= $subject."\n\n";
+            $emailBody .= "ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก (ID: $req_id) $msg_status\n\n";
+            if($status == 'Approved') {
+            $emailBody .= "ท่านสามารถพิมพ์ใบคำขอได้ที่ <a href='$url'>$url</a>\n\n";
+            }
+            $emailBody .= "หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง\n\n";
+            $emailBody .= "ขอแสดงความนับถือ\n\n";
+            $emailBody .= "คณะมนุษยศาสตร์และสังคมศาสตร์\n";
+            $emailBody .= "อีเมล: husoc.system@msu.ac.th\n\n";
+            $emailBody .= "หมายเหตุ: นี่เป็นข้อความอัตโนมัติจากระบบ กรุณาอย่าตอบกลับอีเมลนี้\n\n\n";
 
-            $message = "<html><body style='font-family: Sarabun, sans-serif;'>
-                <h3 style='color: $color;'>รายการคำขอเบิกของท่าน $msg_status</h3>
-                <p>เรียน คุณ {$u_info['full_name']},</p>
-                $action
-                <br><small style='color:#888;'>ระบบแจ้งเตือนอัตโนมัติ - คณะมนุษยศาสตร์และสังคมศาสตร์</small>
-                </body></html>";
+            // Set charset for Thai language support
+            $mail->CharSet = 'UTF-8';
 
-            $headers = "MIME-Version: 1.0\r\nContent-type:text/html;charset=UTF-8\r\nFrom: ระบบเบิกของ <no-reply@husoc.msu.ac.th>\r\n";
-            @mail($to, $subject, $message, $headers);
+            // ตั้งค่าเซิร์ฟเวอร์ SMTP
+            $mail->isSMTP();
+            $mail->Host = 'smtp.gmail.com';
+            $mail->SMTPAuth = true;
+            $mail->Username = 'husoc.system@msu.ac.th';
+            $mail->Password = 'htch vllf igcu wxjm';
+            $mail->SMTPSecure = 'tls';
+            $mail->Port = 587;
+
+            // ข้อมูลอีเมล
+            $mail->setFrom('husoc.system@msu.ac.th', 'Husoc System');
+            $mail->addAddress($to, $u_info['email']);
+
+            $mail->Subject = $emailSubject;
+
+            // Convert plain text body to HTML format
+            $mail->isHTML(true);
+            $mail->Body = nl2br(htmlspecialchars($emailBody));
+            $mail->AltBody = $emailBody; // Plain text version for non-HTML clients
+
+            $mail->send();
+            echo json_encode(['success' => true, 'message' => 'ส่งอีเมลเรียบร้อยแล้ว']);
+
+
+            // $message = "<html><body style='font-family: Sarabun, sans-serif;'>
+            //     <h3 style='color: $color;'>รายการคำขอเบิกของท่าน $msg_status</h3>
+            //     <p>เรียน คุณ {$u_info['full_name']},</p>
+            //     $action
+            //     <br><small style='color:#888;'>ระบบแจ้งเตือนอัตโนมัติ - คณะมนุษยศาสตร์และสังคมศาสตร์</small>
+            //     </body></html>";
+
+            // $headers = "MIME-Version: 1.0\r\nContent-type:text/html;charset=UTF-8\r\nFrom: ระบบเบิกของ <no-reply@husoc.msu.ac.th>\r\n";
+            // @mail($to, $subject, $message, $headers);
         }
 
         $conn->commit();
-        
+
         // เมื่อบันทึกและส่งอีเมลเสร็จสิ้น ให้ส่งกลับมาที่หน้า Dashboard เพื่อรีเฟรชตารางใหม่
         header("Location: dashboard.php?msg=success");
         exit();
 
-    } catch (Exception $e) { $conn->rollBack(); echo $e->getMessage(); }
+    } catch (Exception $e) {
+        $conn->rollBack();
+        echo $e->getMessage();
+    }
 }
 ?>
