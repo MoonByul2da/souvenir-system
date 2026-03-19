@@ -38,7 +38,7 @@ require_once 'ajax/get_all_ajax.php';
                 </div>
             </div>
             <div>
-                <a href="login" class="btn btn-outline-secondary btn-sm"><i class="bi bi-shield-lock"></i> สำหรับเจ้าหน้าที่</a>
+                <a href="login" class="btn btn-outline-secondary btn-sm"><i class="bi bi-shield-lock"></i> สำหรับแอดมิน</a>
             </div>
         </div>
     </header>
@@ -76,7 +76,15 @@ require_once 'ajax/get_all_ajax.php';
                         </div>
                         <div class="col-md-3">
                             <label class="form-label">ฝ่าย/แผนก <span class="text-danger">*</span></label>
-                            <input type="text" name="department" id="department" class="form-control" placeholder="ระบุสังกัด..." required>
+                            <select name="department" id="department" class="form-select" required>
+                                <option value="">- เลือกฝ่าย/แผนก -</option>
+                                <option value="ภาควิชาภาษาไทยและภาษาตะวันออก">ภาควิชาภาษาไทยและภาษาตะวันออก</option>
+                                <option value="ภาควิชาประวัติศาสตร์">ภาควิชาประวัติศาสตร์</option>
+                                <option value="ภาควิชาภาษาตะวันตกและภาษาศาสตร์">ภาควิชาภาษาตะวันตกและภาษาศาสตร์</option>
+                                <option value="ภาควิชาภูมิศาสตร์">ภาควิชาภูมิศาสตร์</option>
+                                <option value="ภาควิชาสังคมวิทยาและมานุษยวิทยา">ภาควิชาสังคมวิทยาและมานุษยวิทยา</option>
+                                <option value="สำนักงานเลขานุการ">สำนักงานเลขานุการ</option>
+                            </select>
                         </div>
                     </div>
                     
@@ -129,7 +137,7 @@ require_once 'ajax/get_all_ajax.php';
                     <button type="button" class="btn btn-outline-secondary btn-sm mb-4" onclick="addItem()">+ เพิ่มรายการ</button>
 
                     <div class="text-center mt-4">
-                        <button type="submit" class="btn btn-msu btn-lg px-5 shadow-sm">บันทึกและพิมพ์ใบเบิก</button>
+                        <button type="submit" class="btn btn-msu btn-lg px-5 shadow-sm">ส่งคำร้องและบันทึก</button>
                     </div>
 
                 </form>
@@ -259,6 +267,45 @@ require_once 'ajax/get_all_ajax.php';
             `;
             itemCount++;
         }
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <script>
+        document.getElementById('requestForm').addEventListener('submit', function(e) {
+            e.preventDefault(); // ป้องกันไม่ให้ฟอร์มเปลี่ยนหน้าไปที่ save_request.php (หน้าปริ้นท์)
+
+            let formData = new FormData(this);
+
+            // ส่งข้อมูลไปยังไฟล์ save_request.php เบื้องหลัง
+            fetch('save_request.php', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                // เมื่อส่งข้อมูลสำเร็จ ให้แสดง Popup
+                Swal.fire({
+                    title: 'บันทึกเรียบร้อย!',
+                    text: 'กรุณารออีเมลตอบกลับเพื่อนำไปเบิกของที่ระลึก',
+                    icon: 'success',
+                    confirmButtonText: 'ตกลง',
+                    confirmButtonColor: '#F2CD00'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        // เมื่อกดปุ่มตกลง ให้รีเฟรชหน้าเพื่อเคลียร์ฟอร์ม
+                        window.location.reload(); 
+                    }
+                });
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                Swal.fire({
+                    title: 'เกิดข้อผิดพลาด',
+                    text: 'ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง',
+                    icon: 'error',
+                    confirmButtonText: 'ตกลง'
+                });
+            });
+        });
     </script>
 </body>
 </html>

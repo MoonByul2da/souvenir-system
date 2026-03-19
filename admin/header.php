@@ -64,7 +64,7 @@ $current_page = basename($_SERVER['PHP_SELF']);
             <span class="me-3 text-light d-none d-md-block">
                 <i class="bi bi-person-circle"></i> <?php echo isset($_SESSION['admin_name']) ? $_SESSION['admin_name'] : 'Admin'; ?>
             </span>
-            <a href="../form_request.php" target="_blank" class="btn btn-outline-light btn-sm me-2">หน้าฟอร์ม</a>
+            <a href="../" target="_blank" class="btn btn-outline-light btn-sm me-2">หน้าฟอร์ม</a>
             <button onclick="confirmLogout()" class="btn btn-danger btn-sm">ออกจากระบบ</button>
         </div>
     </div>

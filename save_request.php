@@ -122,8 +122,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         // ============================================================
 
-        // บันทึกเสร็จแล้วส่งไปหน้าพิมพ์เอกสาร
-        header("Location: print_request.php?id=" . $last_req_id);
+        // โค้ดหลังจากบันทึกข้อมูลลง Database เรียบร้อยแล้ว
+        header("Location: success.php");
         exit();
 
     } catch (Exception $e) {

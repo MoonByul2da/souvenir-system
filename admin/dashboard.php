@@ -5,6 +5,7 @@ require_once '../db_connect.php';
 $items_all = $conn->query("SELECT * FROM souvenir_items")->fetchAll(PDO::FETCH_ASSOC);
 $items_json = json_encode($items_all);
 
+// ปรับให้เรียงตามวันที่ทำรายการล่าสุด (request_date DESC)
 $sql = "SELECT r.*, u.full_name, u.department, u.phone, u.email, 
         (SELECT GROUP_CONCAT(CONCAT(i.item_name, ' (', rd.qty_requested, ' ', rd.unit, ')') SEPARATOR ', ') 
          FROM souvenir_request_details rd 
@@ -12,7 +13,7 @@ $sql = "SELECT r.*, u.full_name, u.department, u.phone, u.email,
          WHERE rd.request_id = r.request_id) as item_list
         FROM souvenir_requests r 
         JOIN souvenir_users u ON r.user_id = u.user_id 
-        ORDER BY r.date_required ASC, r.request_id ASC";
+        ORDER BY r.request_date DESC";
 
 $stmt = $conn->prepare($sql);
 $stmt->execute();
@@ -21,51 +22,143 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <div class="container-fluid mt-4">
     <div class="card shadow-sm">
-        <div class="card-header bg-white py-3">
+        <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
             <h5 class="m-0"><i class="bi bi-table"></i> รายการขอเบิก</h5>
         </div>
         <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover align-middle">
-                    <thead class="table-light">
-                        <tr>
-                            <th width="15%">อีเมล</th> 
-                            <th width="10%">วันที่ใช้</th>
-                            <th width="15%">ผู้ขอเบิก</th>
-                            <th width="10%">หน่วยงาน</th>
-                            <th width="20%">รายการของ</th>
-                            <th width="10%">สถานะ</th>
-                            <th width="10%">จัดการ</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach($requests as $req): ?>
-                            <tr>
-                                <td class="text-primary small"><?php echo $req['email']; ?></td>
-                                <td class="fw-bold"><?php echo DateThai($req['date_required']); ?></td>
-                                <td><?php echo $req['full_name']; ?></td>
-                                <td><?php echo $req['department']; ?></td>
-                                <td><small><?php echo $req['item_list']; ?></small></td>
-                                <td>
-                                    <?php 
-                                        $statusClass = ($req['status']=='Pending'?'bg-warning text-dark':($req['status']=='Approved'?'bg-success':'bg-danger'));
-                                    ?>
-                                    <span class="badge <?php echo $statusClass; ?>"><?php echo $req['status']; ?></span>
-                                </td>
-                                <td>
-                                    <div class="btn-group">
-                                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
-                                            <i class="bi bi-pencil-square"></i> ตรวจสอบ
-                                        </button>
-                                        <a href="../print_request.php?id=<?php echo $req['request_id']; ?>" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="bi bi-printer"></i></a>
-                                    </div>
-                                </td>
-                            </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-        </div>
+            
+            <ul class="nav nav-tabs mb-3" id="requestTabs" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active fw-bold text-warning" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending" type="button" role="tab" aria-controls="pending" aria-selected="true">
+                        <i class="bi bi-hourglass-split"></i> รอตรวจสอบ
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold text-success" id="approved-tab" data-bs-toggle="tab" data-bs-target="#approved" type="button" role="tab" aria-controls="approved" aria-selected="false">
+                        <i class="bi bi-check-circle"></i> อนุมัติแล้ว
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link fw-bold text-danger" id="rejected-tab" data-bs-toggle="tab" data-bs-target="#rejected" type="button" role="tab" aria-controls="rejected" aria-selected="false">
+                        <i class="bi bi-x-circle"></i> ไม่อนุมัติ
+                    </button>
+                </li>
+            </ul>
+
+            <div class="tab-content" id="requestTabsContent">
+                
+                <div class="tab-pane fade show active" id="pending" role="tabpanel" aria-labelledby="pending-tab">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="15%">วันที่ทำรายการ</th> 
+                                    <th width="15%">ผู้ขอเบิก</th>
+                                    <th width="15%">หน่วยงาน</th>
+                                    <th width="25%">รายการของ</th>
+                                    <th width="10%">สถานะ</th>
+                                    <th width="20%">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach($requests as $req): if($req['status'] == 'Pending'): ?>
+                                    <tr>
+                                        <td class="small"><?php echo date('d/m/Y H:i', strtotime($req['request_date'])); ?></td>
+                                        <td>
+                                            <?php echo $req['full_name']; ?><br>
+                                            <small class="text-primary"><?php echo $req['email']; ?></small>
+                                        </td>
+                                        <td><?php echo $req['department']; ?></td>
+                                        <td><small><?php echo $req['item_list']; ?></small></td>
+                                        <td><span class="badge bg-warning text-dark">รอตรวจสอบ</span></td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
+                                                <i class="bi bi-pencil-square"></i> ตรวจสอบ
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endif; endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="approved" role="tabpanel" aria-labelledby="approved-tab">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="15%">วันที่ทำรายการ</th> 
+                                    <th width="15%">ผู้ขอเบิก</th>
+                                    <th width="15%">หน่วยงาน</th>
+                                    <th width="25%">รายการของ</th>
+                                    <th width="10%">สถานะ</th>
+                                    <th width="20%">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach($requests as $req): if($req['status'] == 'Approved'): ?>
+                                    <tr>
+                                        <td class="small"><?php echo date('d/m/Y H:i', strtotime($req['request_date'])); ?></td>
+                                        <td>
+                                            <?php echo $req['full_name']; ?><br>
+                                            <small class="text-primary"><?php echo $req['email']; ?></small>
+                                        </td>
+                                        <td><?php echo $req['department']; ?></td>
+                                        <td><small><?php echo $req['item_list']; ?></small></td>
+                                        <td><span class="badge bg-success">อนุมัติ</span></td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary mb-1" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
+                                                <i class="bi bi-eye"></i> ดูข้อมูล
+                                            </button>
+                                            <a href="../print_request.php?id=<?php echo $req['request_id']; ?>" target="_blank" class="btn btn-sm btn-primary mb-1">
+                                                <i class="bi bi-printer"></i> พิมพ์
+                                            </a>
+                                        </td>
+                                    </tr>
+                                <?php endif; endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="rejected" role="tabpanel" aria-labelledby="rejected-tab">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th width="15%">วันที่ทำรายการ</th> 
+                                    <th width="15%">ผู้ขอเบิก</th>
+                                    <th width="15%">หน่วยงาน</th>
+                                    <th width="25%">รายการของ</th>
+                                    <th width="10%">สถานะ</th>
+                                    <th width="20%">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach($requests as $req): if($req['status'] == 'Rejected'): ?>
+                                    <tr>
+                                        <td class="small"><?php echo date('d/m/Y H:i', strtotime($req['request_date'])); ?></td>
+                                        <td>
+                                            <?php echo $req['full_name']; ?><br>
+                                            <small class="text-primary"><?php echo $req['email']; ?></small>
+                                        </td>
+                                        <td><?php echo $req['department']; ?></td>
+                                        <td><small><?php echo $req['item_list']; ?></small></td>
+                                        <td><span class="badge bg-danger">ไม่อนุมัติ</span></td>
+                                        <td>
+                                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
+                                                <i class="bi bi-eye"></i> ดูข้อมูล
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endif; endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+            </div> </div>
     </div>
 </div>
 
@@ -73,7 +166,7 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <div class="modal-dialog modal-xl">
         <form action="update_and_approve.php" method="POST" id="requestForm">
             <div class="modal-content">
-                <div class="modal-header bg-primary text-white">
+                <div class="modal-header bg-primary text-white border-0">
                     <h5 class="modal-title">ตรวจสอบและพิจารณาใบเบิก</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
@@ -153,10 +246,11 @@ function addRowInModal() {
     document.querySelector('#modalItemTable tbody').insertAdjacentHTML('beforeend', generateRow(itemIdx));
     itemIdx++;
 }
+
 function confirmApprove() {
     Swal.fire({
         title: 'ยืนยันการอนุมัติ?',
-        text: "ระบบจะบันทึกข้อมูลและส่งอีเมลแจ้งผลการอนุมัติไปยังผู้ขอเบิกทันที",
+        text: "ระบบจะบันทึกข้อมูล ตัดสต็อก และส่งอีเมลแจ้งผลการอนุมัติไปยังผู้ขอเบิกทันที",
         icon: 'success', 
         showCancelButton: true,
         confirmButtonColor: '#198754', 
@@ -167,6 +261,10 @@ function confirmApprove() {
         if (result.isConfirmed) {
             const form = document.getElementById('requestForm');
             
+            // ลบ input status ตัวเก่าออกถ้ามี
+            const oldStatus = document.querySelector('input[name="status"]');
+            if(oldStatus) oldStatus.remove();
+
             const statusInput = document.createElement('input');
             statusInput.type = 'hidden';
             statusInput.name = 'status';
@@ -181,7 +279,7 @@ function confirmApprove() {
 function confirmReject() {
     Swal.fire({
         title: 'ยืนยันการไม่อนุมัติ?',
-        text: "คุณต้องการปฏิเสธคำขอเบิกรายการนี้ใช่หรือไม่?",
+        text: "ระบบจะเปลี่ยนสถานะเป็นไม่อนุมัติ และส่งอีเมลแจ้งผู้ขอเบิก",
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#dc3545', 
@@ -191,28 +289,34 @@ function confirmReject() {
     }).then((result) => {
         if (result.isConfirmed) {
             const form = document.getElementById('requestForm');
+            
+            // ลบ input status ตัวเก่าออกถ้ามี
+            const oldStatus = document.querySelector('input[name="status"]');
+            if(oldStatus) oldStatus.remove();
+
             const statusInput = document.createElement('input');
             statusInput.type = 'hidden';
             statusInput.name = 'status';
             statusInput.value = 'Rejected';
+            
             form.appendChild(statusInput);
             form.submit();
         }
     })
 }
 </script>
+
 <?php if(isset($_GET['msg']) && $_GET['msg'] == 'success'): ?>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
         Swal.fire({
             icon: 'success',
-            title: 'อัปเดตข้อมูลสำเร็จ!',
+            title: 'ดำเนินการสำเร็จ!',
             text: 'ระบบได้บันทึกข้อมูลและส่งอีเมลแจ้งผู้เบิกเรียบร้อยแล้ว',
             showConfirmButton: false,
-            timer: 2500 // แสดงข้อความ 2.5 วินาทีแล้วปิดเอง
+            timer: 2500
         });
         
-        // ลบ ?msg=success ออกจาก URL เพื่อไม่ให้แจ้งเตือนซ้ำเวลากดรีเฟรชหน้าเว็บอีกรอบ
         window.history.replaceState(null, null, window.location.pathname);
     });
 </script>

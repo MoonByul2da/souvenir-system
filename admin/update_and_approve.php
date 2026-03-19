@@ -17,6 +17,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $user_id = $_POST['user_id'];
         $status = $_POST['status']; // รับค่า 'Approved' หรือ 'Rejected'
 
+        // เช็คสถานะปัจจุบันก่อน เพื่อป้องกันการตัดสต็อกซ้ำ (กรณีที่เคยอนุมัติไปแล้ว)
+        $stmt_check = $conn->prepare("SELECT status FROM souvenir_requests WHERE request_id = ?");
+        $stmt_check->execute([$req_id]);
+        $current_req = $stmt_check->fetch(PDO::FETCH_ASSOC);
+        $current_status = $current_req ? $current_req['status'] : '';
+
         // 1. อัปเดตข้อมูลผู้ใช้และหัวข้อใบเบิก
         $stmt_u = $conn->prepare("UPDATE souvenir_users SET full_name = ?, prefix = ?, department = ? WHERE user_id = ?");
         $stmt_u->execute(array($_POST['full_name'], $_POST['requester_prefix'], $_POST['department'], $user_id));
@@ -24,13 +30,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt_r = $conn->prepare("UPDATE souvenir_requests SET requester_prefix = ?, purpose = ?, date_required = ?, status = ? WHERE request_id = ?");
         $stmt_r->execute(array($_POST['requester_prefix'], $_POST['purpose'], $_POST['date_required'], $status, $req_id));
 
-        // 2. จัดการรายการของ (อัปเดตตามที่เจ้าหน้าที่แก้ไขใน Modal)
+        // 2. จัดการรายการของ และ ตัดสต็อก
+        // ลบรายการเก่าออกก่อนเพื่อลงรายการใหม่ตามที่เจ้าหน้าที่อาจจะแก้ไข
         $conn->prepare("DELETE FROM souvenir_request_details WHERE request_id = ?")->execute(array($req_id));
+        
         if (!empty($_POST['items'])) {
+            // เตรียมคำสั่งเพิ่มรายการใหม่
             $stmt_d = $conn->prepare("INSERT INTO souvenir_request_details (request_id, item_id, qty_requested, unit, remark) VALUES (?, ?, ?, ?, ?)");
+            
+            // แก้ไขตรงนี้: เปลี่ยนจาก items เป็น souvenir_items ตาม Database ของคุณ
+            $stmt_deduct = $conn->prepare("UPDATE souvenir_items SET stock = stock - ? WHERE item_id = ?");
+
             foreach ($_POST['items'] as $item) {
                 if ($item['qty'] > 0) {
+                    // 2.1 บันทึกรายการใหม่ลงฐานข้อมูล
                     $stmt_d->execute(array($req_id, $item['id'], $item['qty'], $item['unit'], $item['remark']));
+                    
+                    // 2.2 ตัดสต็อก เฉพาะกรณีที่เปลี่ยนสถานะเป็น Approved และสถานะเดิมยังไม่ใช่ Approved
+                    if ($status == 'Approved' && $current_status != 'Approved') {
+                        $stmt_deduct->execute(array($item['qty'], $item['id']));
+                    }
                 }
             }
         }
@@ -47,21 +66,17 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             if ($status == 'Approved') {
                 $subject = "อนุมัติ: รายการเบิกของที่ระลึก (ID: $req_id)";
                 $msg_status = "ได้รับการอนุมัติเรียบร้อยแล้ว";
-                $color = "#198754";
                 $url = "http://" . $_SERVER['HTTP_HOST'] . "/souvenir-system/print_request.php?id=" . $req_id;
-                $action = "<p><a href='$url' style='padding:10px; background:#0d6efd; color:white; text-decoration:none; border-radius:5px;'>คลิกพิมพ์ใบเบิก</a></p>";
             } else {
                 $subject = "แจ้งผล: รายการเบิกของที่ระลึก (ID: $req_id)";
                 $msg_status = "ไม่ได้รับการอนุมัติ";
-                $color = "#dc3545";
-                $action = "<p>หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง</p>";
             }
             $emailSubject = $subject;
             $emailBody = "เรียน คุณ" . $u_info['full_name'] . "\n\n";
             $emailBody .= $subject."\n\n";
             $emailBody .= "ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก (ID: $req_id) $msg_status\n\n";
             if($status == 'Approved') {
-            $emailBody .= "ท่านสามารถพิมพ์ใบคำขอได้ที่ <a href='$url'>$url</a>\n\n";
+                $emailBody .= "ท่านสามารถพิมพ์ใบคำขอได้ที่ <a href='$url'>$url</a>\n\n";
             }
             $emailBody .= "หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง\n\n";
             $emailBody .= "ขอแสดงความนับถือ\n\n";
@@ -81,6 +96,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $mail->SMTPSecure = 'tls';
             $mail->Port = 587;
 
+            // แก้ไขตรงนี้: เพิ่ม SMTPOptions เพื่อข้ามการตรวจสอบ SSL/TLS ใน Localhost (XAMPP)
+            $mail->SMTPOptions = array(
+                'ssl' => array(
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true
+                )
+            );
+
             // ข้อมูลอีเมล
             $mail->setFrom('husoc.system@msu.ac.th', 'Husoc System');
             $mail->addAddress($to, $u_info['email']);
@@ -90,32 +114,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             // Convert plain text body to HTML format
             $mail->isHTML(true);
             $mail->Body = nl2br(htmlspecialchars($emailBody));
-            $mail->AltBody = $emailBody; // Plain text version for non-HTML clients
+            $mail->AltBody = $emailBody; 
 
             $mail->send();
-            echo json_encode(['success' => true, 'message' => 'ส่งอีเมลเรียบร้อยแล้ว']);
-
-
-            // $message = "<html><body style='font-family: Sarabun, sans-serif;'>
-            //     <h3 style='color: $color;'>รายการคำขอเบิกของท่าน $msg_status</h3>
-            //     <p>เรียน คุณ {$u_info['full_name']},</p>
-            //     $action
-            //     <br><small style='color:#888;'>ระบบแจ้งเตือนอัตโนมัติ - คณะมนุษยศาสตร์และสังคมศาสตร์</small>
-            //     </body></html>";
-
-            // $headers = "MIME-Version: 1.0\r\nContent-type:text/html;charset=UTF-8\r\nFrom: ระบบเบิกของ <no-reply@husoc.msu.ac.th>\r\n";
-            // @mail($to, $subject, $message, $headers);
         }
 
         $conn->commit();
 
-        // เมื่อบันทึกและส่งอีเมลเสร็จสิ้น ให้ส่งกลับมาที่หน้า Dashboard เพื่อรีเฟรชตารางใหม่
+        // เมื่อบันทึก ตัดสต็อก และส่งอีเมลเสร็จสิ้น ให้ส่งกลับมาที่หน้า Dashboard
         header("Location: dashboard.php?msg=success");
         exit();
 
     } catch (Exception $e) {
         $conn->rollBack();
-        echo $e->getMessage();
+        echo "Error: " . $e->getMessage();
     }
 }
 ?>
