@@ -17,7 +17,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $user_id = $_POST['user_id'];
         $status = $_POST['status']; // รับค่า 'Approved' หรือ 'Rejected'
 
-        // เช็คสถานะปัจจุบันก่อน เพื่อป้องกันการตัดสต็อกซ้ำ (กรณีที่เคยอนุมัติไปแล้ว)
+        // เช็คสถานะปัจจุบันก่อน เพื่อป้องกันการตัดสต็อกซ้ำ
         $stmt_check = $conn->prepare("SELECT status FROM souvenir_requests WHERE request_id = ?");
         $stmt_check->execute([$req_id]);
         $current_req = $stmt_check->fetch(PDO::FETCH_ASSOC);
@@ -31,30 +31,42 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt_r->execute(array($_POST['requester_prefix'], $_POST['purpose'], $_POST['date_required'], $status, $req_id));
 
         // 2. จัดการรายการของ และ ตัดสต็อก
-        // ลบรายการเก่าออกก่อนเพื่อลงรายการใหม่ตามที่เจ้าหน้าที่อาจจะแก้ไข
         $conn->prepare("DELETE FROM souvenir_request_details WHERE request_id = ?")->execute(array($req_id));
         
+        $item_names_arr = []; // สำหรับเก็บชื่อสินค้าไปใส่ในอีเมล
+
         if (!empty($_POST['items'])) {
-            // เตรียมคำสั่งเพิ่มรายการใหม่
             $stmt_d = $conn->prepare("INSERT INTO souvenir_request_details (request_id, item_id, qty_requested, unit, remark) VALUES (?, ?, ?, ?, ?)");
-            
-            // แก้ไขตรงนี้: เปลี่ยนจาก items เป็น souvenir_items ตาม Database ของคุณ
             $stmt_deduct = $conn->prepare("UPDATE souvenir_items SET stock = stock - ? WHERE item_id = ?");
+            
+            // เตรียมคำสั่งดึงชื่อสินค้า
+            $stmt_get_name = $conn->prepare("SELECT * FROM souvenir_items WHERE item_id = ?");
 
             foreach ($_POST['items'] as $item) {
                 if ($item['qty'] > 0) {
-                    // 2.1 บันทึกรายการใหม่ลงฐานข้อมูล
+                    // บันทึกรายการใหม่
                     $stmt_d->execute(array($req_id, $item['id'], $item['qty'], $item['unit'], $item['remark']));
                     
-                    // 2.2 ตัดสต็อก เฉพาะกรณีที่เปลี่ยนสถานะเป็น Approved และสถานะเดิมยังไม่ใช่ Approved
+                    // ตัดสต็อก
                     if ($status == 'Approved' && $current_status != 'Approved') {
                         $stmt_deduct->execute(array($item['qty'], $item['id']));
+                    }
+
+                    // ดึงชื่อสินค้ามาเก็บไว้สำหรับอีเมล
+                    $stmt_get_name->execute(array($item['id']));
+                    $itm = $stmt_get_name->fetch(PDO::FETCH_ASSOC);
+                    if ($itm) {
+                        // ดึงชื่อมารวมไว้ (เช็คทั้ง item_name และ name เผื่อไว้)
+                        $item_names_arr[] = isset($itm['item_name']) ? $itm['item_name'] : (isset($itm['name']) ? $itm['name'] : "รหัสสินค้า ".$item['id']);
                     }
                 }
             }
         }
 
-        // 3. ส่งอีเมลแจ้งผลตามสถานะที่เลือก
+        // นำชื่อสินค้ามาต่อกันด้วยลูกน้ำ หรือถ้าไม่มีให้ระบุเลข ID แทน
+        $item_text = !empty($item_names_arr) ? implode(', ', $item_names_arr) : "ตามคำขอเลขที่ $req_id";
+
+        // 3. ส่งอีเมลแจ้งผล
         $stmt_m = $conn->prepare("SELECT email, full_name FROM souvenir_users WHERE user_id = ?");
         $stmt_m->execute(array($user_id));
         $u_info = $stmt_m->fetch(PDO::FETCH_ASSOC);
@@ -63,31 +75,39 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         if ($u_info && !empty($u_info['email'])) {
             $to = $u_info['email'];
 
+            // จัดรูปแบบข้อความอีเมล
             if ($status == 'Approved') {
-                $subject = "อนุมัติ: รายการเบิกของที่ระลึก (ID: $req_id)";
-                $msg_status = "ได้รับการอนุมัติเรียบร้อยแล้ว";
-                $url = "http://" . $_SERVER['HTTP_HOST'] . "/souvenir-system/print_request.php?id=" . $req_id;
+                $emailSubject = "แจ้งอนุมัติ: รายการเบิกของที่ระลึก " . $item_text;
+                $url = "http://e-human.msu.ac.th/souvenir-system/print_request.php?id=" . $req_id;
+
+                $emailBodyHTML = "เรียน คุณ" . htmlspecialchars($u_info['full_name']) . "<br><br>";
+                $emailBodyHTML .= "งานประชาสัมพันธ์ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก <b>" . htmlspecialchars($item_text) . "</b> ได้รับการอนุมัติเรียบร้อยแล้ว<br><br>";
+                $emailBodyHTML .= "โปรดพิมพ์เอกสารฉบับนี้เพื่อยื่นเป็นหลักฐานในการเบิกของที่ระลึก ณ งานประชาสัมพันธ์ ชั้น 1 คณะมนุษยศาสตร์และสังคมศาสตร์ ท่านสามารถดาวน์โหลดหลักฐานได้ที่ <a href='" . $url . "'>" . $url . "</a><br><br>";
+                $emailBodyHTML .= "หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง<br><br>";
+                $emailBodyHTML .= "ขอแสดงความนับถือ<br>";
+                $emailBodyHTML .= "งานประชาสัมพันธ์ คณะมนุษยศาสตร์และสังคมศาสตร์<br>";
+                $emailBodyHTML .= "มหาวิทยาลัยมหาสารคาม เบอร์ภายใน 4703<br>";
+                $emailBodyHTML .= "อีเมล: husoc.system@msu.ac.th<br>";
+                $emailBodyHTML .= "หมายเหตุ: นี่เป็นข้อความอัตโนมัติจากระบบ กรุณาอย่าตอบกลับอีเมลนี้";
+
+                $emailBodyPlain = strip_tags(str_replace(['<br>', '<br><br>'], "\n", $emailBodyHTML));
             } else {
-                $subject = "แจ้งผล: รายการเบิกของที่ระลึก (ID: $req_id)";
-                $msg_status = "ไม่ได้รับการอนุมัติ";
-            }
-            $emailSubject = $subject;
-            $emailBody = "เรียน คุณ" . $u_info['full_name'] . "\n\n";
-            $emailBody .= $subject."\n\n";
-            $emailBody .= "ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก (ID: $req_id) $msg_status\n\n";
-            if($status == 'Approved') {
-                $emailBody .= "ท่านสามารถพิมพ์ใบคำขอได้ที่ <a href='$url'>$url</a>\n\n";
-            }
-            $emailBody .= "หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง\n\n";
-            $emailBody .= "ขอแสดงความนับถือ\n\n";
-            $emailBody .= "คณะมนุษยศาสตร์และสังคมศาสตร์\n";
-            $emailBody .= "อีเมล: husoc.system@msu.ac.th\n\n";
-            $emailBody .= "หมายเหตุ: นี่เป็นข้อความอัตโนมัติจากระบบ กรุณาอย่าตอบกลับอีเมลนี้\n\n\n";
+                $emailSubject = "แจ้งผล: รายการเบิกของที่ระลึก " . $item_text;
+                
+                $emailBodyHTML = "เรียน คุณ" . htmlspecialchars($u_info['full_name']) . "<br><br>";
+                $emailBodyHTML .= "งานประชาสัมพันธ์ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก <b>" . htmlspecialchars($item_text) . "</b> <span style='color:red;'>ไม่ได้รับการอนุมัติ</span><br><br>";
+                $emailBodyHTML .= "หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง<br><br>";
+                $emailBodyHTML .= "ขอแสดงความนับถือ<br>";
+                $emailBodyHTML .= "งานประชาสัมพันธ์ คณะมนุษยศาสตร์และสังคมศาสตร์<br>";
+                $emailBodyHTML .= "มหาวิทยาลัยมหาสารคาม เบอร์ภายใน 4703<br>";
+                $emailBodyHTML .= "อีเมล: husoc.system@msu.ac.th<br>";
+                $emailBodyHTML .= "หมายเหตุ: นี่เป็นข้อความอัตโนมัติจากระบบ กรุณาอย่าตอบกลับอีเมลนี้";
 
-            // Set charset for Thai language support
+                $emailBodyPlain = strip_tags(str_replace(['<br>', '<br><br>'], "\n", $emailBodyHTML));
+            }
+
+            // ตั้งค่า PHPMailer
             $mail->CharSet = 'UTF-8';
-
-            // ตั้งค่าเซิร์ฟเวอร์ SMTP
             $mail->isSMTP();
             $mail->Host = 'smtp.gmail.com';
             $mail->SMTPAuth = true;
@@ -96,7 +116,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $mail->SMTPSecure = 'tls';
             $mail->Port = 587;
 
-            // แก้ไขตรงนี้: เพิ่ม SMTPOptions เพื่อข้ามการตรวจสอบ SSL/TLS ใน Localhost (XAMPP)
             $mail->SMTPOptions = array(
                 'ssl' => array(
                     'verify_peer' => false,
@@ -105,23 +124,20 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 )
             );
 
-            // ข้อมูลอีเมล
             $mail->setFrom('husoc.system@msu.ac.th', 'Husoc System');
-            $mail->addAddress($to, $u_info['email']);
+            $mail->addAddress($to, $u_info['full_name']);
 
             $mail->Subject = $emailSubject;
-
-            // Convert plain text body to HTML format
+            
+            // เปิดให้ใช้ HTML และยัดข้อมูลเข้าไป
             $mail->isHTML(true);
-            $mail->Body = nl2br(htmlspecialchars($emailBody));
-            $mail->AltBody = $emailBody; 
+            $mail->Body = $emailBodyHTML;
+            $mail->AltBody = $emailBodyPlain; 
 
             $mail->send();
         }
 
         $conn->commit();
-
-        // เมื่อบันทึก ตัดสต็อก และส่งอีเมลเสร็จสิ้น ให้ส่งกลับมาที่หน้า Dashboard
         header("Location: dashboard.php?msg=success");
         exit();
 
