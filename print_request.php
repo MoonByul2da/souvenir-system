@@ -2,8 +2,6 @@
 require_once 'db_connect.php';
 require_once 'ajax/get_print_ajax.php';
 
-
-
 // ฟังก์ชันเส้นประ (บังคับชิดซ้ายเพื่อให้ชื่อต่อท้ายหัวข้อทันที)
 function textWithDots($text, $minWidth = '100px') {
     $content = ($text && $text != '') ? $text : '&nbsp;';
@@ -38,31 +36,28 @@ function textWithDots($text, $minWidth = '100px') {
         .garuda { position: absolute; top: 0; left: 0; width: 60px; height: auto; }
         .title { text-align: center; font-weight: bold; font-size: 24pt; padding-top: 15px; }
 
-        /* คลาสทั่วไปสำหรับบรรทัดที่ชิดซ้าย (เช่น ฝ่าย/แผนก) */
         .line-item { 
             margin-top: 5px;
             margin-bottom: 5px;
             text-align: left; 
         }
 
-        /* คลาสใหม่: สำหรับบรรทัดเนื้อหาที่ต้องการ "ย่อหน้า" เฉพาะคำขึ้นต้น */
         .indent-body {
             margin-top: 5px;
             margin-bottom: 5px;
             text-align: left;
-            text-indent: 2.5cm; /* ย่อหน้าเฉพาะคำแรก (ข้าพเจ้า) ส่วนชื่อจะไหลตามมาเอง */
+            text-indent: 2.5cm; 
         }
 
-        /* เส้นประ: บังคับ text-align: left และ display inline เพื่อให้ต่อกันเนียนๆ */
         .dotted-line { 
             border-bottom: 1px dotted #333; 
             display: inline-block; 
-            text-align: left;       /* สำคัญ: ให้ชื่อชิดซ้ายติดกับคำนำหน้า */
+            text-align: left;       
             padding-left: 5px;      
             padding-right: 5px;     
             vertical-align: bottom; 
             white-space: nowrap;
-            text-indent: 0;         /* รีเซ็ต indent ภายในเส้นประ ไม่ให้ชื่อขยับตาม */
+            text-indent: 0;         
         }
 
         /* ตาราง */
@@ -88,7 +83,7 @@ function textWithDots($text, $minWidth = '100px') {
 
     <div class="no-print" style="text-align:center; margin: 20px; padding: 20px; background: #eee;">
         <button onclick="window.print()" style="padding:10px 25px; cursor:pointer;">🖨️ พิมพ์หน้านี้</button>
-        <a href="form_request.php" style="margin-left: 20px;">← กลับหน้าหลัก</a>
+        <a href="./" style="margin-left: 20px;">← กลับหน้าหลัก</a>
     </div>
 
     <div class="header-container">
@@ -158,7 +153,7 @@ function textWithDots($text, $minWidth = '100px') {
             <tr>
                 <th style="width: 10%;">ลำดับที่</th>
                 <th style="width: 45%;">รายการของที่ระลึก</th>
-                <th style="width: 20%;">จำนวน (ชิ้น/ชุด)</th>
+                <th style="width: 20%;">จำนวนที่อนุมัติ</th>
                 <th style="width: 25%;">หมายเหตุ</th>
             </tr>
         </thead>

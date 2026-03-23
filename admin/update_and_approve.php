@@ -17,7 +17,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $user_id = $_POST['user_id'];
         $status = $_POST['status']; // รับค่า 'Approved' หรือ 'Rejected'
 
-        // เช็คสถานะปัจจุบันก่อน เพื่อป้องกันการตัดสต็อกซ้ำ
+        // เช็คสถานะปัจจุบันก่อน เพื่อป้องกันการตัดสต็อกซ้ำ (กรณีที่เคยอนุมัติไปแล้ว)
         $stmt_check = $conn->prepare("SELECT status FROM souvenir_requests WHERE request_id = ?");
         $stmt_check->execute([$req_id]);
         $current_req = $stmt_check->fetch(PDO::FETCH_ASSOC);
@@ -31,15 +31,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $stmt_r->execute(array($_POST['requester_prefix'], $_POST['purpose'], $_POST['date_required'], $status, $req_id));
 
         // 2. จัดการรายการของ และ ตัดสต็อก
-        $conn->prepare("DELETE FROM souvenir_request_details WHERE request_id = ?")->execute(array($req_id));
-        
         $item_names_arr = []; // สำหรับเก็บชื่อสินค้าไปใส่ในอีเมล
 
         if (!empty($_POST['items'])) {
+            // กรณีที่มีการส่งรายการมาแก้ไข (แอดมินแก้จำนวน) ให้ลบของเก่าแล้วใส่ของใหม่
+            $conn->prepare("DELETE FROM souvenir_request_details WHERE request_id = ?")->execute(array($req_id));
+            
             $stmt_d = $conn->prepare("INSERT INTO souvenir_request_details (request_id, item_id, qty_requested, unit, remark) VALUES (?, ?, ?, ?, ?)");
             $stmt_deduct = $conn->prepare("UPDATE souvenir_items SET stock = stock - ? WHERE item_id = ?");
-            
-            // เตรียมคำสั่งดึงชื่อสินค้า
             $stmt_get_name = $conn->prepare("SELECT * FROM souvenir_items WHERE item_id = ?");
 
             foreach ($_POST['items'] as $item) {
@@ -52,19 +51,42 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                         $stmt_deduct->execute(array($item['qty'], $item['id']));
                     }
 
-                    // ดึงชื่อสินค้ามาเก็บไว้สำหรับอีเมล
+                    // ดึงชื่อและจำนวนมาเก็บไว้สำหรับอีเมล
                     $stmt_get_name->execute(array($item['id']));
                     $itm = $stmt_get_name->fetch(PDO::FETCH_ASSOC);
                     if ($itm) {
-                        // ดึงชื่อมารวมไว้ (เช็คทั้ง item_name และ name เผื่อไว้)
-                        $item_names_arr[] = isset($itm['item_name']) ? $itm['item_name'] : (isset($itm['name']) ? $itm['name'] : "รหัสสินค้า ".$item['id']);
+                        $item_name = isset($itm['item_name']) ? $itm['item_name'] : (isset($itm['name']) ? $itm['name'] : "รหัสสินค้า ".$item['id']);
+                        $item_names_arr[] = "&nbsp;&nbsp;&nbsp;- " . $item_name . " จำนวน " . $item['qty'] . " " . (!empty($item['unit']) ? $item['unit'] : 'ชิ้น');
                     }
                 }
             }
+        } else {
+            // กรณีไม่ได้ส่งแก้ไขรายการมา (ช่อง input ถูก disabled ไว้) ให้ยึดข้อมูลเดิม "ห้ามลบ"
+            $stmt_old = $conn->prepare("
+                SELECT d.*, i.item_name, i.name 
+                FROM souvenir_request_details d 
+                LEFT JOIN souvenir_items i ON d.item_id = i.item_id 
+                WHERE d.request_id = ?
+            ");
+            $stmt_old->execute(array($req_id));
+            $old_items = $stmt_old->fetchAll(PDO::FETCH_ASSOC);
+
+            $stmt_deduct = $conn->prepare("UPDATE souvenir_items SET stock = stock - ? WHERE item_id = ?");
+
+            foreach ($old_items as $itm) {
+                // ตัดสต็อก
+                if ($status == 'Approved' && $current_status != 'Approved') {
+                    $stmt_deduct->execute(array($itm['qty_requested'], $itm['item_id']));
+                }
+                
+                // ดึงชื่อและจำนวนมาเก็บไว้สำหรับอีเมล
+                $item_name = isset($itm['item_name']) ? $itm['item_name'] : (isset($itm['name']) ? $itm['name'] : "รหัสสินค้า ".$itm['item_id']);
+                $item_names_arr[] = "&nbsp;&nbsp;&nbsp;- " . $item_name . " จำนวน " . $itm['qty_requested'] . " " . (!empty($itm['unit']) ? $itm['unit'] : 'ชิ้น');
+            }
         }
 
-        // นำชื่อสินค้ามาต่อกันด้วยลูกน้ำ หรือถ้าไม่มีให้ระบุเลข ID แทน
-        $item_text = !empty($item_names_arr) ? implode(', ', $item_names_arr) : "ตามคำขอเลขที่ $req_id";
+        // นำรายการมาต่อกันโดยการขึ้นบรรทัดใหม่
+        $item_text = !empty($item_names_arr) ? "<br>" . implode("<br>", $item_names_arr) : "ตามคำขอเลขที่ $req_id";
 
         // 3. ส่งอีเมลแจ้งผล
         $stmt_m = $conn->prepare("SELECT email, full_name FROM souvenir_users WHERE user_id = ?");
@@ -77,11 +99,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             // จัดรูปแบบข้อความอีเมล
             if ($status == 'Approved') {
-                $emailSubject = "แจ้งอนุมัติ: รายการเบิกของที่ระลึก " . $item_text;
-                $url = "http://e-human.msu.ac.th/souvenir-system/print_request.php?id=" . $req_id;
+                $emailSubject = "แจ้งอนุมัติ: รายการเบิกของที่ระลึกตามคำขอเลขที่ " . $req_id;
+                $url = "http://" . $_SERVER['HTTP_HOST'] . "/souvenir-system/print_request?id=" . $req_id;
 
                 $emailBodyHTML = "เรียน คุณ" . htmlspecialchars($u_info['full_name']) . "<br><br>";
-                $emailBodyHTML .= "งานประชาสัมพันธ์ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก <b>" . htmlspecialchars($item_text) . "</b> ได้รับการอนุมัติเรียบร้อยแล้ว<br><br>";
+                $emailBodyHTML .= "งานประชาสัมพันธ์ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก: <b>" . $item_text . "</b><br><br>ได้รับการอนุมัติเรียบร้อยแล้ว<br><br>";
                 $emailBodyHTML .= "โปรดพิมพ์เอกสารฉบับนี้เพื่อยื่นเป็นหลักฐานในการเบิกของที่ระลึก ณ งานประชาสัมพันธ์ ชั้น 1 คณะมนุษยศาสตร์และสังคมศาสตร์ ท่านสามารถดาวน์โหลดหลักฐานได้ที่ <a href='" . $url . "'>" . $url . "</a><br><br>";
                 $emailBodyHTML .= "หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง<br><br>";
                 $emailBodyHTML .= "ขอแสดงความนับถือ<br>";
@@ -92,10 +114,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 $emailBodyPlain = strip_tags(str_replace(['<br>', '<br><br>'], "\n", $emailBodyHTML));
             } else {
-                $emailSubject = "แจ้งผล: รายการเบิกของที่ระลึก " . $item_text;
+                $emailSubject = "แจ้งผล: รายการเบิกของที่ระลึกตามคำขอเลขที่ " . $req_id;
                 
                 $emailBodyHTML = "เรียน คุณ" . htmlspecialchars($u_info['full_name']) . "<br><br>";
-                $emailBodyHTML .= "งานประชาสัมพันธ์ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก <b>" . htmlspecialchars($item_text) . "</b> <span style='color:red;'>ไม่ได้รับการอนุมัติ</span><br><br>";
+                $emailBodyHTML .= "งานประชาสัมพันธ์ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก: <b>" . $item_text . "</b><br><br><span style='color:red;'>ไม่ได้รับการอนุมัติ</span><br><br>";
                 $emailBodyHTML .= "หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง<br><br>";
                 $emailBodyHTML .= "ขอแสดงความนับถือ<br>";
                 $emailBodyHTML .= "งานประชาสัมพันธ์ คณะมนุษยศาสตร์และสังคมศาสตร์<br>";
@@ -129,7 +151,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             $mail->Subject = $emailSubject;
             
-            // เปิดให้ใช้ HTML และยัดข้อมูลเข้าไป
+            // เปิดให้ใช้ HTML
             $mail->isHTML(true);
             $mail->Body = $emailBodyHTML;
             $mail->AltBody = $emailBodyPlain; 
@@ -138,7 +160,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
 
         $conn->commit();
-        header("Location: dashboard.php?msg=success");
+        header("Location: dashboard?msg=success");
         exit();
 
     } catch (Exception $e) {
