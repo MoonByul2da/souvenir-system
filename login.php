@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_login'])) {
         <div id="loginAlert" class="alert alert-danger py-2 d-none"></div>
 
         <form id="loginForm" method="POST" novalidate>
-            <input type="hidden" name="ajax_login" value="1">
+            <input type="hidden" name="login" value="1">
             <div class="mb-3 text-start">
                 <label class="form-label">Username</label>
                 <input type="text" name="username" class="form-control" required autofocus>

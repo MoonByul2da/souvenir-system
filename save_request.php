@@ -1,6 +1,11 @@
 <?php
 require_once 'db_connect.php';
 
+// นำเข้า PHPMailer ของระบบของที่ระลึก
+require_once 'vendor/autoload.php'; 
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\Exception;
+
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     try {
         $conn->beginTransaction();
@@ -74,55 +79,45 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $conn->commit();
 
         // ============================================================
-        // ส่วนส่งอีเมลแจ้งเตือน
+        // ✨ เริ่มส่วนส่งอีเมลแจ้งเตือนแอดมิน (Souvenir System) ✨
         // ============================================================
-        
-        // 1. อีเมลปลายทาง (Admin)
-        $to = "65011210037@msu.ac.th"; 
-        
-        // 2. หัวข้ออีเมล
-        $subject = "แจ้งเตือน: มีรายการขอเบิกของที่ระลึกใหม่ (คุณ $fullName)";
+        try {
+            $mail = new PHPMailer(true);
+            $mail->CharSet = 'UTF-8';
+            $mail->isSMTP();
+            $mail->Host       = 'smtp.gmail.com';
+            $mail->SMTPAuth   = true;
+            $mail->Username   = 'husoc.system@msu.ac.th';
+            $mail->Password   = 'htch vllf igcu wxjm';
+            $mail->SMTPSecure = 'tls';
+            $mail->Port       = 587;
+            $mail->SMTPOptions = array('ssl' => array('verify_peer' => false, 'verify_peer_name' => false, 'allow_self_signed' => true));
 
-        // 3. เนื้อหาอีเมล (HTML)
-        // สร้างลิงก์สำหรับกดไปดู (เปลี่ยน localhost เป็นชื่อเว็บจริงถ้าออนแอร์แล้ว)
-        $link_dashboard = "http://localhost/request/admin/dashboard.php";
+            $mail->setFrom('husoc.system@msu.ac.th', 'System Notification');
+            
+            // ใส่อีเมลแอดมินที่ต้องการให้แจ้งเตือน
+            $mail->addAddress('65011210037@msu.ac.th', 'Admin Husoc'); 
 
-        $message = "
-        <html>
-        <head>
-            <title>รายการขอเบิกใหม่</title>
-        </head>
-        <body style='font-family: Sarabun, sans-serif;'>
-            <h3 style='color: #0056b3;'>มีรายการขอเบิกของที่ระลึกเข้ามาใหม่</h3>
-            <p><b>ผู้ขอเบิก:</b> $fullName</p>
-            <p><b>อีเมลผู้เบิก:</b> $email</p>
-            <p><b>หน่วยงาน:</b> $dept</p>
-            <p><b>วันที่ต้องการใช้:</b> " . DateThai($_POST['date_required']) . "</p>
-            <p><b>วัตถุประสงค์:</b> {$_POST['purpose']}</p>
-            <br>
-            <p>กรุณาตรวจสอบและอนุมัติที่ลิงก์ด้านล่าง:</p>
-            <p>
-                <a href='$link_dashboard' style='background-color: #28a745; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; display:inline-block;'>
-                    เข้าสู่ระบบหลังบ้าน
-                </a>
-            </p>
-            <br>
-            <small style='color: #888;'>ระบบแจ้งเตือนอัตโนมัติ - คณะมนุษยศาสตร์และสังคมศาสตร์</small>
-        </body>
-        </html>
-        ";
-
-        // 4. ตั้งค่า Header
-        $headers = "MIME-Version: 1.0" . "\r\n";
-        $headers .= "Content-type:text/html;charset=UTF-8" . "\r\n";
-        $headers .= "From: ระบบเบิกของ <no-reply@husoc.msu.ac.th>" . "\r\n";
-
-        // 5. ส่งอีเมล (ใส่ @ ดักไว้กัน Error ในเครื่อง Localhost)
-        @mail($to, $subject, $message, $headers);
-
+            $mail->isHTML(true);
+            $mail->Subject = "แจ้งเตือน: มีรายการขอเบิกของที่ระลึกใหม่จาก คุณ " . htmlspecialchars($fullName);
+            
+            $mailBody = "<b>แจ้งเตือนจากระบบเบิกของที่ระลึก</b><br><br>";
+            $mailBody .= "มีผู้ส่งคำร้องขอเบิกของที่ระลึกเข้ามาใหม่ กรุณาเข้าสู่ระบบเพื่อตรวจสอบและอนุมัติ<br><br>";
+            $mailBody .= "<b>ผู้ขอเบิก:</b> " . htmlspecialchars($prefix) . " " . htmlspecialchars($fullName) . "<br>";
+            $mailBody .= "<b>หน่วยงาน:</b> " . htmlspecialchars($dept) . "<br>";
+            $mailBody .= "<b>วันที่ต้องการใช้:</b> " . htmlspecialchars($_POST['date_required']) . "<br>";
+            $mailBody .= "<b>วัตถุประสงค์:</b> " . htmlspecialchars($_POST['purpose']) . "<br><br>";
+            $admin_link = "http://" . $_SERVER['HTTP_HOST'] . rtrim(dirname($_SERVER['PHP_SELF']), '/') . "/login.php";
+            $mailBody .= "👉 <a href='" . $admin_link . "'>คลิกที่นี่เพื่อเข้าสู่ระบบจัดการ</a>";
+            
+            $mail->Body = $mailBody;
+            $mail->send();
+        } catch (Exception $e) {
+            // ปล่อยผ่านไป กรณีอีเมลแจ้งเตือนมีปัญหา
+        }
         // ============================================================
 
-        // โค้ดหลังจากบันทึกข้อมูลลง Database เรียบร้อยแล้ว
+        // โค้ดหลังจากบันทึกข้อมูลลง Database เรียบร้อยแล้ว (สำหรับระบบ Ajax/SweetAlert)
         header("Location: success.php");
         exit();
 
