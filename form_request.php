@@ -102,11 +102,11 @@ require_once 'ajax/get_all_ajax.php';
                     <div class="row g-3 mb-3">
                         <div class="col-md-6">
                             <label class="form-label">วันที่ทำรายการ <span class="text-danger">*</span></label>
-                            <input type="date" name="request_date" class="form-control" value="<?php echo date('Y-m-d'); ?>" required>
+                            <input type="date" name="request_date" class="form-control" value="<?php echo date('Y-m-d'); ?>" required onclick="if(typeof this.showPicker === 'function') this.showPicker();" style="cursor:pointer;">
                         </div>
                         <div class="col-md-6">
                             <label class="form-label">วันที่ต้องการใช้ของ <span class="text-danger">*</span></label>
-                            <input type="date" name="date_required" class="form-control" required>
+                            <input type="date" name="date_required" class="form-control" required onclick="if(typeof this.showPicker === 'function') this.showPicker();" style="cursor:pointer;">
                         </div>
                     </div>
 

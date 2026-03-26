@@ -81,12 +81,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
                 
                 // ดึงชื่อและจำนวนมาเก็บไว้สำหรับอีเมล
                 $item_name = isset($itm['item_name']) ? $itm['item_name'] : (isset($itm['name']) ? $itm['name'] : "รหัสสินค้า ".$itm['item_id']);
-                $item_names_arr[] = "&nbsp;&nbsp;&nbsp;- " . $item_name . " จำนวน " . $itm['qty_requested'] . " " . (!empty($itm['unit']) ? $itm['unit'] : 'ชิ้น');
+                $item_names_arr[] = " " . $item_name . " จำนวน " . $itm['qty_requested'] . " " . (!empty($itm['unit']) ? $itm['unit'] : 'ชิ้น');
             }
         }
 
         // นำรายการมาต่อกันโดยการขึ้นบรรทัดใหม่
-        $item_text = !empty($item_names_arr) ? "<br>" . implode("<br>", $item_names_arr) : "ตามคำขอเลขที่ $req_id";
+        $item_text = !empty($item_names_arr) ? " " . implode(" ", $item_names_arr) : "ตามคำขอเลขที่ $req_id";
 
         // 3. ส่งอีเมลแจ้งผล
         $stmt_m = $conn->prepare("SELECT email, full_name FROM souvenir_users WHERE user_id = ?");
@@ -99,10 +99,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
             // จัดรูปแบบข้อความอีเมล
             if ($status == 'Approved') {
-                $emailSubject = "แจ้งอนุมัติ: รายการเบิกของที่ระลึกตามคำขอเลขที่ " . $req_id;
+                $emailSubject = "แจ้งอนุมัติ: รายการเบิกของที่ระลึก " . $item_text;
                 $url = "http://" . $_SERVER['HTTP_HOST'] . "/souvenir-system/print_request?id=" . $req_id;
 
-                $emailBodyHTML = "เรียน คุณ" . htmlspecialchars($u_info['full_name']) . "<br><br>";
+                // ลบคำนำหน้าออกจากชื่อ
+                $clean_user_name = trim(str_replace(['นาย ', 'นาง ', 'นางสาว ', 'นาย', 'นาง', 'นางสาว'], '', $u_info['full_name']));
+                $emailBodyHTML = "เรียน คุณ" . htmlspecialchars($clean_user_name) . "<br><br>";
                 $emailBodyHTML .= "งานประชาสัมพันธ์ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก: <b>" . $item_text . "</b><br><br>ได้รับการอนุมัติเรียบร้อยแล้ว<br><br>";
                 $emailBodyHTML .= "โปรดพิมพ์เอกสารฉบับนี้เพื่อยื่นเป็นหลักฐานในการเบิกของที่ระลึก ณ งานประชาสัมพันธ์ ชั้น 1 คณะมนุษยศาสตร์และสังคมศาสตร์ ท่านสามารถดาวน์โหลดหลักฐานได้ที่ <a href='" . $url . "'>" . $url . "</a><br><br>";
                 $emailBodyHTML .= "หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง<br><br>";
@@ -114,9 +116,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
                 $emailBodyPlain = strip_tags(str_replace(['<br>', '<br><br>'], "\n", $emailBodyHTML));
             } else {
-                $emailSubject = "แจ้งผล: รายการเบิกของที่ระลึกตามคำขอเลขที่ " . $req_id;
+                $emailSubject = "แจ้งผล: รายการเบิกของที่ระลึก " . $item_text;
                 
-                $emailBodyHTML = "เรียน คุณ" . htmlspecialchars($u_info['full_name']) . "<br><br>";
+                // ลบคำนำหน้าออกจากชื่อ
+                $clean_user_name = trim(str_replace(['นาย ', 'นาง ', 'นางสาว ', 'นาย', 'นาง', 'นางสาว'], '', $u_info['full_name']));
+                $emailBodyHTML = "เรียน คุณ" . htmlspecialchars($clean_user_name) . "<br><br>";
                 $emailBodyHTML .= "งานประชาสัมพันธ์ขอแจ้งให้ทราบว่า รายการเบิกของที่ระลึก: <b>" . $item_text . "</b><br><br><span style='color:red;'>ไม่ได้รับการอนุมัติ</span><br><br>";
                 $emailBodyHTML .= "หากท่านมีข้อสงสัย กรุณาติดต่อสอบถามเจ้าหน้าที่งานประชาสัมพันธ์โดยตรง<br><br>";
                 $emailBodyHTML .= "ขอแสดงความนับถือ<br>";

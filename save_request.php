@@ -99,7 +99,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             $mail->addAddress('65011210037@msu.ac.th', 'Admin Husoc'); 
 
             $mail->isHTML(true);
-            $mail->Subject = "แจ้งเตือน: มีรายการขอเบิกของที่ระลึกใหม่จาก คุณ " . htmlspecialchars($fullName);
+            
+            // ลบคำนำหน้าออกจากชื่อเพื่อป้องกันการซ้อนทับกัน
+            $clean_name = trim(str_replace(['นาย ', 'นาง ', 'นางสาว ', 'นาย', 'นาง', 'นางสาว'], '', $fullName));
+
+            // เปลี่ยนหัวข้ออีเมลตามที่ต้องการ
+            $mail->Subject = "แจ้งเตือน: มีรายการขอเบิกของที่ระลึกใหม่ เรียนคุณ " . htmlspecialchars($clean_name);
             
             $mailBody = "<b>แจ้งเตือนจากระบบเบิกของที่ระลึก</b><br><br>";
             $mailBody .= "มีผู้ส่งคำร้องขอเบิกของที่ระลึกเข้ามาใหม่ กรุณาเข้าสู่ระบบเพื่อตรวจสอบและอนุมัติ<br><br>";
