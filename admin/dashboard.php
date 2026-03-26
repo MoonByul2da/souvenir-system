@@ -2,6 +2,25 @@
 require_once 'header.php'; 
 require_once '../db_connect.php'; 
 
+// ==========================================
+// ✨ ระบบลบข้อมูล
+// ==========================================
+if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['delete_request'])) {
+    $del_id = $_POST['delete_id'];
+    try {
+        // ลบรายละเอียดรายการของก่อน (ป้องกัน Error Foreign Key)
+        $conn->prepare("DELETE FROM souvenir_request_details WHERE request_id = ?")->execute([$del_id]);
+        // ลบใบเบิกหลัก
+        $conn->prepare("DELETE FROM souvenir_requests WHERE request_id = ?")->execute([$del_id]);
+        
+        echo "<script>window.location.href='dashboard.php?action=deleted';</script>";
+        exit();
+    } catch (Exception $e) {
+        echo "<script>alert('ลบข้อมูลไม่สำเร็จ: " . $e->getMessage() . "');</script>";
+    }
+}
+// ==========================================
+
 $items_all = $conn->query("SELECT * FROM souvenir_items")->fetchAll(PDO::FETCH_ASSOC);
 $items_json = json_encode($items_all);
 
@@ -20,6 +39,8 @@ $stmt->execute();
 $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 ?>
 
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+
 <div class="container-fluid mt-4">
     <div class="card shadow-sm">
         <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
@@ -27,7 +48,7 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
         </div>
         <div class="card-body">
             
-            <ul class="nav nav-tabs mb-3" id="requestTabs" role="tablist">
+            <ul class="nav nav-tabs mb-4" id="requestTabs" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active fw-bold text-warning" id="pending-tab" data-bs-toggle="tab" data-bs-target="#pending" type="button" role="tab" aria-controls="pending" aria-selected="true">
                         <i class="bi bi-hourglass-split"></i> รอตรวจสอบ
@@ -49,7 +70,7 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                 
                 <div class="tab-pane fade show active" id="pending" role="tabpanel" aria-labelledby="pending-tab">
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle">
+                        <table class="table table-hover align-middle datatable w-100">
                             <thead class="table-light">
                                 <tr>
                                     <th width="15%">วันที่ทำรายการ</th> 
@@ -72,9 +93,16 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <td><small><?php echo $req['item_list']; ?></small></td>
                                         <td><span class="badge bg-warning text-dark">รอตรวจสอบ</span></td>
                                         <td>
-                                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
+                                            <button type="button" class="btn btn-sm btn-outline-primary mb-1" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
                                                 <i class="bi bi-pencil-square"></i> ตรวจสอบ
                                             </button>
+                                            <form method="POST" class="d-inline" id="delReq<?php echo $req['request_id']; ?>">
+                                                <input type="hidden" name="delete_id" value="<?php echo $req['request_id']; ?>">
+                                                <input type="hidden" name="delete_request" value="1">
+                                                <button type="button" class="btn btn-sm btn-outline-danger mb-1" onclick="confirmDeleteReq('delReq<?php echo $req['request_id']; ?>')">
+                                                    <i class="bi bi-trash"></i> ลบ
+                                                </button>
+                                            </form>
                                         </td>
                                     </tr>
                                 <?php endif; endforeach; ?>
@@ -85,7 +113,7 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 <div class="tab-pane fade" id="approved" role="tabpanel" aria-labelledby="approved-tab">
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle">
+                        <table class="table table-hover align-middle datatable w-100">
                             <thead class="table-light">
                                 <tr>
                                     <th width="15%">วันที่ทำรายการ</th> 
@@ -109,11 +137,18 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <td><span class="badge bg-success">อนุมัติ</span></td>
                                         <td>
                                             <button type="button" class="btn btn-sm btn-outline-secondary mb-1" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
-                                                <i class="bi bi-eye"></i> ดูข้อมูล
+                                                <i class="bi bi-eye"></i> ข้อมูล
                                             </button>
                                             <a href="../print_request.php?id=<?php echo $req['request_id']; ?>" target="_blank" class="btn btn-sm btn-primary mb-1">
                                                 <i class="bi bi-printer"></i> พิมพ์
                                             </a>
+                                            <form method="POST" class="d-inline" id="delReq<?php echo $req['request_id']; ?>">
+                                                <input type="hidden" name="delete_id" value="<?php echo $req['request_id']; ?>">
+                                                <input type="hidden" name="delete_request" value="1">
+                                                <button type="button" class="btn btn-sm btn-outline-danger mb-1" onclick="confirmDeleteReq('delReq<?php echo $req['request_id']; ?>')">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </form>
                                         </td>
                                     </tr>
                                 <?php endif; endforeach; ?>
@@ -124,7 +159,7 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
                 <div class="tab-pane fade" id="rejected" role="tabpanel" aria-labelledby="rejected-tab">
                     <div class="table-responsive">
-                        <table class="table table-hover align-middle">
+                        <table class="table table-hover align-middle datatable w-100">
                             <thead class="table-light">
                                 <tr>
                                     <th width="15%">วันที่ทำรายการ</th> 
@@ -147,9 +182,16 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                                         <td><small><?php echo $req['item_list']; ?></small></td>
                                         <td><span class="badge bg-danger">ไม่อนุมัติ</span></td>
                                         <td>
-                                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
-                                                <i class="bi bi-eye"></i> ดูข้อมูล
+                                            <button type="button" class="btn btn-sm btn-outline-secondary mb-1" onclick="openEditModal(<?php echo $req['request_id']; ?>)">
+                                                <i class="bi bi-eye"></i> ข้อมูล
                                             </button>
+                                            <form method="POST" class="d-inline" id="delReq<?php echo $req['request_id']; ?>">
+                                                <input type="hidden" name="delete_id" value="<?php echo $req['request_id']; ?>">
+                                                <input type="hidden" name="delete_request" value="1">
+                                                <button type="button" class="btn btn-sm btn-outline-danger mb-1" onclick="confirmDeleteReq('delReq<?php echo $req['request_id']; ?>')">
+                                                    <i class="bi bi-trash"></i> ลบ
+                                                </button>
+                                            </form>
                                         </td>
                                     </tr>
                                 <?php endif; endforeach; ?>
@@ -158,7 +200,8 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     </div>
                 </div>
 
-            </div> </div>
+            </div> 
+        </div>
     </div>
 </div>
 
@@ -191,7 +234,33 @@ $requests = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
 <script>
+// ✨ เริ่มต้นการทำงานของ DataTables
+$(document).ready(function() {
+    $('.datatable').DataTable({
+        "pageLength": 10,
+        "ordering": false, // ปิดการเรียงลำดับซ้ำซ้อน เพื่อคงค่าจาก SQL ไว้
+        "language": {
+            "lengthMenu": "แสดง _MENU_ รายการต่อหน้า",
+            "zeroRecords": "ไม่พบข้อมูล",
+            "info": "แสดงหน้า _PAGE_ จาก _PAGES_",
+            "infoEmpty": "ไม่มีข้อมูล",
+            "infoFiltered": "(กรองข้อมูลจาก _MAX_ รายการทั้งหมด)",
+            "search": "ค้นหา:",
+            "paginate": {
+                "first": "หน้าแรก",
+                "last": "หน้าสุดท้าย",
+                "next": "ถัดไป",
+                "previous": "ก่อนหน้า"
+            }
+        }
+    });
+});
+
 const itemsData = <?php echo $items_json; ?>;
 let itemIdx = 0;
 
@@ -247,6 +316,24 @@ function addRowInModal() {
     itemIdx++;
 }
 
+// ✨ Script สำหรับปุ่มลบ
+function confirmDeleteReq(formId) {
+    Swal.fire({
+        title: 'ยืนยันการลบทิ้ง?',
+        text: "ข้อมูลนี้จะถูกลบออกจากระบบและไม่สามารถกู้คืนได้!",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: 'ใช่, ลบทิ้งเลย',
+        cancelButtonText: 'ยกเลิก'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById(formId).submit();
+        }
+    })
+}
+
 function confirmApprove() {
     Swal.fire({
         title: 'ยืนยันการอนุมัติ?',
@@ -260,8 +347,6 @@ function confirmApprove() {
     }).then((result) => {
         if (result.isConfirmed) {
             const form = document.getElementById('requestForm');
-            
-            // ลบ input status ตัวเก่าออกถ้ามี
             const oldStatus = document.querySelector('input[name="status"]');
             if(oldStatus) oldStatus.remove();
 
@@ -289,8 +374,6 @@ function confirmReject() {
     }).then((result) => {
         if (result.isConfirmed) {
             const form = document.getElementById('requestForm');
-            
-            // ลบ input status ตัวเก่าออกถ้ามี
             const oldStatus = document.querySelector('input[name="status"]');
             if(oldStatus) oldStatus.remove();
 
@@ -309,14 +392,16 @@ function confirmReject() {
 <?php if(isset($_GET['msg']) && $_GET['msg'] == 'success'): ?>
 <script>
     document.addEventListener("DOMContentLoaded", function() {
-        Swal.fire({
-            icon: 'success',
-            title: 'ดำเนินการสำเร็จ!',
-            text: 'ระบบได้บันทึกข้อมูลและส่งอีเมลแจ้งผู้เบิกเรียบร้อยแล้ว',
-            showConfirmButton: false,
-            timer: 2500
-        });
-        
+        Swal.fire({ icon: 'success', title: 'ดำเนินการสำเร็จ!', text: 'ระบบได้บันทึกข้อมูลและส่งอีเมลแจ้งผู้เบิกเรียบร้อยแล้ว', showConfirmButton: false, timer: 2500 });
+        window.history.replaceState(null, null, window.location.pathname);
+    });
+</script>
+<?php endif; ?>
+
+<?php if(isset($_GET['action']) && $_GET['action'] == 'deleted'): ?>
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        Swal.fire({ icon: 'success', title: 'ลบข้อมูลสำเร็จ!', showConfirmButton: false, timer: 2000 });
         window.history.replaceState(null, null, window.location.pathname);
     });
 </script>

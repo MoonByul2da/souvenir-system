@@ -125,7 +125,7 @@ function textWithDots($text, $minWidth = '100px') {
     </div>
 
     <div class="indent-body">
-        ข้าพเจ้า<?php echo textWithDots($header['requester_prefix'] . '. ' . $header['full_name'], '210px'); ?>ตำแหน่ง<?php echo textWithDots($header['requester_position'], '160px'); ?>
+        ข้าพเจ้า<?php echo textWithDots($header['requester_prefix'] . ' ' . $header['full_name'], '210px'); ?>ตำแหน่ง<?php echo textWithDots($header['requester_position'], '160px'); ?>
     </div>
 
     <div class="line-item">

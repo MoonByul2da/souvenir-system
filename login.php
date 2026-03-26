@@ -8,7 +8,7 @@ if (isset($_SESSION['admin_id'])) {
     exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_login'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     header('Content-Type: application/json; charset=utf-8');
 
     $username = isset($_POST['username']) ? trim($_POST['username']) : '';
@@ -35,8 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax_login'])) {
             exit();
         }
 
-        $inputHash = sha1(sha1($password));
-        if (hash_equals($row['password'], $inputHash)) {
+        // ✨ ตรวจสอบรหัสผ่านด้วย password_verify() (รองรับ Hash แบบ Bcrypt)
+        if (password_verify($password, $row['password'])) {
             $_SESSION['admin_id'] = $row['admin_id'];
             $_SESSION['admin_name'] = $row['username'];
 
